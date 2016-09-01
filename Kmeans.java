@@ -1,5 +1,7 @@
 package kMeansClustering;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -23,16 +25,17 @@ public class Kmeans {
 		centroids = new ArrayList<Centroid>();
 		this.k= k;
 	}
-	public static void main(String[] args) {
-		List<String> fields = Arrays.asList("x", "y", "z");
+	public static void main(String[] args) throws IOException {
+		List<String> fields = Arrays.asList("EV/EBITDA_time", "P/Book_time", "Analyst Rating_time", "EBIT Growth_time", "Fin Lvg_time");
 
-		List<Map<String, Double>> data = generatePoints();
+		List<Map<String, Double>> data = tools.readNormedData(new File("normedData.csv"));
+		System.out.println("done reading");
 		
-		Kmeans best = batchRun(4, 20, 5, fields, data);
+		Kmeans best = batchRun(20, 30, 5, fields, data);
 		
 		System.out.printf("Score: %.3f\n", best.score);
 		for(Centroid c: best.centroids)
-			System.out.println(c.export());
+			System.out.printf("%.3f%% %s\n",c.average("Forward12m")*100,c.export() );
 	}
 	public static Kmeans batchRun(int k, int limit, int amount, List<String> fields, List<Map<String, Double>> data){
 		
@@ -157,7 +160,15 @@ public class Kmeans {
 			this.vals = copyMap(values);
 		}
 		public double getVal(String s){
+			try{
 			return (double)vals.get(s);
+			}
+			catch(NullPointerException e){
+				for(Object key: vals.keySet())
+					System.out.println(key.toString() + " -> " + vals.get(key));
+				System.exit(1);
+				return 0;
+			}
 		}
 		public String export(){
 			String s = "";
@@ -183,7 +194,7 @@ public class Kmeans {
 		public String export(){
 			String s = String.format("#%d \tsize: %d\t", id, elements.size());
 			for(String f: fields)
-				s = String.format("%s%s: %.3f ", s, f, getVal(f));
+				s = String.format("%s%s: %.3f \t", s, f, getVal(f));
 			return s;
 		}
 		private boolean addPoint(Point p){
@@ -195,6 +206,15 @@ public class Kmeans {
 			p.center = this;
 			
 			return change;
+		}
+		private double average(String s){
+			double foo = 0;
+			int count = 0;
+			for(Point p: elements){
+				foo+=p.getVal(s);
+				count++;
+			}
+			return foo / (double) count;
 		}
 	}
 	private double distance(Point p1, Point p2){
