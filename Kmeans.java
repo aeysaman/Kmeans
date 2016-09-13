@@ -1,13 +1,17 @@
 package kMeansClustering;
 
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+
+import general.Read;
+import general.Tools;
 
 public class Kmeans {
 
@@ -17,44 +21,48 @@ public class Kmeans {
 	List<Centroid> centroids;
 	int k;
 	double score;
-	public Kmeans(int k, List<String> fields, List<Map<String, Double>> data){
+	static String returnField = "Forward3m";
+	static String period = "_all";
+	public Kmeans(int k, List<String> fields, List<Point> data){
 		this.fields = fields;
 		points = new ArrayList<Point>();
-		for(Map<String,Double> datum: data)
-			points.add(new Point(datum));
+		for(Point datum: data){
+			datum.top = this;
+			points.add(datum);
+		}
 		centroids = new ArrayList<Centroid>();
 		this.k= k;
 	}
 	public static void main(String[] args) throws IOException {
-		List<String> fields = Arrays.asList("EV/EBITDA_time", "P/Book_time", "Analyst Rating_time", "EBIT Growth_time", "Fin Lvg_time");
-
-		List<Map<String, Double>> data = tools.readNormedData(new File("normedData.csv"));
+		List<String> fields = Arrays.asList("EV/EBITDA", "P/Book", "Analyst Rating", "EBIT Growth", "Fin Lvg", "ROIC", "Interest Coverage", "Div Yield", "Market Cap", "Rev Growth", "Current Ratio");
+		
+		for (int i = 0; i<fields.size(); i++)
+			fields.set(i,fields.get(i).concat(Kmeans.period));
+		
+		List<Point> data = Read.readDataToPoints(new File("normedData.csv"));
 		System.out.println("done reading");
 		
-		Kmeans best = batchRun(20, 30, 5, fields, data);
+		Kmeans best = batchRun(10, 20, 3, fields, data);
 		
 		System.out.printf("Score: %.3f\n", best.score);
 		for(Centroid c: best.centroids)
-			System.out.printf("%.3f%% %s\n",c.average("Forward12m")*100,c.export() );
+			System.out.printf("%7.3f%% %s\n",c.average(Kmeans.returnField)*100,c.export() );
+		
+		best.printData(new File("clusteredData.csv"));
 	}
-	public static Kmeans batchRun(int k, int limit, int amount, List<String> fields, List<Map<String, Double>> data){
-		
+	public static Kmeans batchRun(int k, int limit, int amount, List<String> fields, List<Point> data){
 		Kmeans best=null;
-		
 		for (int i = 0; i<amount; i++){
 			Kmeans foo = new Kmeans(k, fields, data);
 			
 			foo.run(limit);
-			System.out.printf("Run %d, score: %.3f\n", i, foo.score);
+			System.out.printf("Run %d, score: %.3f\n", i+1, foo.score);
 			if(best==null || best.score >foo.score)
 				best = foo;
 		}
-		
 		return best;
-		
 	}
 	public void run(int limit){
-		
 		generateCentroids();
 
 		for(int i = 0; i<limit; i++){
@@ -90,7 +98,7 @@ public class Kmeans {
 				double sum = 0;
 				int count = 0;
 				for(Point p: c.elements){
-					sum+= p.getVal(field);
+					sum+= p.getValue(field);
 					count++;
 				}
 				c.vals.put(field, sum / (double) count);
@@ -112,70 +120,8 @@ public class Kmeans {
 	}
 	private void generateCentroids(){
 		for(int i = 0; i<k; i++){
-			Point copy = points.get(rand.nextInt(points.size()));
-
-			Map<String, Double> x = copyMap(copy.vals);
-			
-			centroids.add(new Centroid(x,i));
-		}
-	}
- 	public static List<Map<String, Double>> generatePoints(){
-		int amt = 10000;
- 		List<Map<String, Double>> result = new ArrayList<Map<String, Double>>();
-		for(int i = 0; i<amt; i++){
-			Map<String, Double> x = new HashMap<String, Double>();
-			x.put("x", .5 + Math.random());
-			x.put("y", .5 + Math.random());
-			x.put("z", -.5 + Math.random());
-			result.add(x);
-		}
-		for(int i = 0; i<amt; i++){
-			Map<String, Double> x = new HashMap<String, Double>();
-			x.put("x", .5 + Math.random());
-			x.put("y", -.5 + Math.random());
-			x.put("z", .5 + Math.random());
-			result.add(x);
-		}
-		for(int i = 0; i<amt; i++){
-			Map<String, Double> x = new HashMap<String, Double>();
-			x.put("x", -.5 + Math.random());
-			x.put("y", .5 + Math.random());
-			x.put("z", .5 + Math.random());
-			result.add(x);
-		}
-		for(int i = 0; i<amt; i++){
-			Map<String, Double> x = new HashMap<String, Double>();
-			x.put("x", -.5 + Math.random());
-			x.put("y", -.5 + Math.random());
-			x.put("z", -.5 + Math.random());
-			result.add(x);
-		}
-		return result;
-	}
-	private class Point{
-		Map<String, Double> vals;
-		Centroid center;
-		
-		public Point(Map<String, Double> values){
-			this.vals = copyMap(values);
-		}
-		public double getVal(String s){
-			try{
-			return (double)vals.get(s);
-			}
-			catch(NullPointerException e){
-				for(Object key: vals.keySet())
-					System.out.println(key.toString() + " -> " + vals.get(key));
-				System.exit(1);
-				return 0;
-			}
-		}
-		public String export(){
-			String s = "";
-			for(String f: fields)
-				s = String.format("%s%s: %.3f ", s, f, getVal(f));
-			
-			return s;
+			Point foo = points.get(rand.nextInt(points.size()));
+			centroids.add(new Centroid(Tools.copyMap(foo.data),i));
 		}
 	}
 	public class Centroid{
@@ -192,9 +138,9 @@ public class Kmeans {
 			return (double)vals.get(s);
 		}
 		public String export(){
-			String s = String.format("#%d \tsize: %d\t", id, elements.size());
+			String s = String.format("#%d \tsize: %4d\t", id, elements.size());
 			for(String f: fields)
-				s = String.format("%s%s: %.3f \t", s, f, getVal(f));
+				s = String.format("%s%s: %6.3f ", s, f.replaceFirst(Kmeans.period,""), getVal(f));
 			return s;
 		}
 		private boolean addPoint(Point p){
@@ -211,30 +157,32 @@ public class Kmeans {
 			double foo = 0;
 			int count = 0;
 			for(Point p: elements){
-				foo+=p.getVal(s);
+				foo+=p.getValue(s);
 				count++;
 			}
 			return foo / (double) count;
 		}
 	}
-	private double distance(Point p1, Point p2){
-		double foo= 0;
-		for(String field: fields)
-			foo += Math.pow(p1.getVal(field) - p2.getVal(field), 2.0);
-		
-		return Math.sqrt(foo);
-	}
 	private double distance(Point p, Centroid c){
 		double foo= 0;
 		for(String field: fields)
-			foo += Math.pow(p.getVal(field) - c.getVal(field), 2.0);
+			foo += Math.pow(p.getValue(field) - c.getVal(field), 2.0);
 		
 		return Math.sqrt(foo);
 	}
-	private static Map<String, Double> copyMap(Map<String, Double> m){
-		Map<String, Double> foo = new HashMap<String, Double>();
-		for(String s: m.keySet())
-			foo.put(s, m.get(s));
-		return foo;
+	public void printData(File f){
+		try{
+			BufferedWriter fileWriter = new BufferedWriter(new FileWriter(f));
+			fileWriter.write("Security,Date,Group,Return," + String.join(",", fields) + "\n");
+			for(Centroid c: centroids)
+				for(Point p : c.elements){
+					String s = String.format("%s,%s,%d,%f,%s",p.name,p.date.toString(), c.id, p.getValue(returnField),p.export(fields));
+					fileWriter.write(s + "\n");
+				}
+			fileWriter.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
 	}
 }
